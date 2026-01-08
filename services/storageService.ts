@@ -1,140 +1,150 @@
 import { Wheel, SpinResult, User, AnalyticsData } from '../types';
-
-const KEYS = {
-  USER: 'stw_user',
-  WHEELS: 'stw_wheels',
-  RESULTS: 'stw_results',
-};
-
-// Simulate API delay
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+import { db, auth } from './firebase';
+import { 
+  collection, 
+  doc, 
+  getDoc, 
+  getDocs, 
+  setDoc, 
+  deleteDoc, 
+  query, 
+  where, 
+  addDoc,
+  serverTimestamp
+} from 'firebase/firestore';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut,
+  updateProfile
+} from 'firebase/auth';
 
 export const StorageService = {
   getUser: (): User | null => {
-    const u = localStorage.getItem(KEYS.USER);
-    return u ? JSON.parse(u) : null;
+    const u = auth.currentUser;
+    if (!u) return null;
+    return {
+      id: u.uid,
+      email: u.email || '',
+      name: u.displayName || u.email?.split('@')[0] || 'User'
+    };
   },
 
-  login: async (email: string): Promise<User> => {
-    await delay(500);
-    const user = { id: 'u_' + Date.now(), email, name: email.split('@')[0] };
-    localStorage.setItem(KEYS.USER, JSON.stringify(user));
-    return user;
+  login: async (email: string, password: string, isSignUp: boolean): Promise<User> => {
+    let userCredential;
+    
+    if (isSignUp) {
+      userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      // Set a default display name based on email
+      if (userCredential.user) {
+         await updateProfile(userCredential.user, {
+             displayName: email.split('@')[0]
+         });
+      }
+    } else {
+      userCredential = await signInWithEmailAndPassword(auth, email, password);
+    }
+
+    const u = userCredential.user;
+    return {
+      id: u.uid,
+      email: u.email || '',
+      name: u.displayName || u.email?.split('@')[0] || 'User'
+    };
   },
 
   logout: async (): Promise<void> => {
-    localStorage.removeItem(KEYS.USER);
+    await signOut(auth);
   },
 
-  // Get ALL wheels from storage (internal helper)
-  _getAllWheels: (): Wheel[] => {
-    const w = localStorage.getItem(KEYS.WHEELS);
-    return w ? JSON.parse(w) : [];
-  },
-
-  // Get wheels belonging to the current user
   getWheels: async (): Promise<Wheel[]> => {
-    await delay(300);
     const user = StorageService.getUser();
     if (!user) return [];
+
+    const q = query(collection(db, 'wheels'), where('userId', '==', user.id));
+    const querySnapshot = await getDocs(q);
     
-    const allWheels = StorageService._getAllWheels();
-    return allWheels.filter(w => w.userId === user.id);
+    return querySnapshot.docs.map(doc => doc.data() as Wheel);
   },
 
-  // Get a single wheel (checks for ownership or public visibility)
   getWheel: async (id: string): Promise<Wheel | undefined> => {
-    const allWheels = StorageService._getAllWheels();
-    const wheel = allWheels.find((w) => w.id === id);
-    const user = StorageService.getUser();
-
-    if (!wheel) return undefined;
-
-    // Allow if public OR if user owns it
-    if (wheel.isPublic) return wheel;
-    if (user && wheel.userId === user.id) return wheel;
-    
-    return undefined; // Access denied
+    try {
+      const docRef = doc(db, 'wheels', id);
+      const docSnap = await getDoc(docRef);
+      
+      if (docSnap.exists()) {
+        // Firestore rules will handle the permission check.
+        // If we can read it, it's either ours or public.
+        return docSnap.data() as Wheel;
+      }
+      return undefined;
+    } catch (error) {
+      console.error("Error fetching wheel:", error);
+      return undefined;
+    }
   },
 
   saveWheel: async (wheel: Wheel): Promise<void> => {
-    await delay(300);
     const user = StorageService.getUser();
     if (!user) throw new Error("Must be logged in to save");
 
-    // Ensure userId is set
+    // Ensure userId is strictly set to current user
     wheel.userId = user.id;
+    wheel.updatedAt = new Date().toISOString(); // Update timestamp
 
-    const wheels = StorageService._getAllWheels();
-    const existingIndex = wheels.findIndex((w) => w.id === wheel.id);
-    
-    if (existingIndex >= 0) {
-      // Ensure we are updating our own wheel
-      if (wheels[existingIndex].userId !== user.id) {
-          throw new Error("Cannot update a wheel you don't own");
-      }
-      wheels[existingIndex] = wheel;
-    } else {
-      wheels.push(wheel);
-    }
-    localStorage.setItem(KEYS.WHEELS, JSON.stringify(wheels));
+    // Using setDoc with merge:true is safer, but strictly we replace the wheel config here
+    await setDoc(doc(db, 'wheels', wheel.id), wheel);
   },
 
   deleteWheel: async (id: string): Promise<void> => {
-    const user = StorageService.getUser();
-    if (!user) return;
-
-    const wheels = StorageService._getAllWheels();
-    // Only delete if owner
-    const filtered = wheels.filter((w) => w.id !== id || w.userId !== user.id);
-    localStorage.setItem(KEYS.WHEELS, JSON.stringify(filtered));
+    await deleteDoc(doc(db, 'wheels', id));
   },
 
   recordSpin: async (result: SpinResult): Promise<void> => {
-    const r = localStorage.getItem(KEYS.RESULTS);
-    const results: SpinResult[] = r ? JSON.parse(r) : [];
-    results.push(result);
-    localStorage.setItem(KEYS.RESULTS, JSON.stringify(results));
+    // We store spins in a subcollection 'spins' under the specific wheel
+    const spinsRef = collection(db, 'wheels', result.wheelId, 'spins');
+    await addDoc(spinsRef, result);
   },
 
   getAnalytics: async (wheelId: string): Promise<AnalyticsData> => {
-    await delay(300);
-    
-    // Check ownership first
-    const wheel = await StorageService.getWheel(wheelId);
-    const user = StorageService.getUser();
-    
-    if (!wheel || !user || wheel.userId !== user.id) {
-        throw new Error("Access denied");
-    }
+    const spinsRef = collection(db, 'wheels', wheelId, 'spins');
+    // Note: In a production app with thousands of spins, you would want to use 
+    // Firestore aggregation queries (count()) instead of fetching all documents.
+    // For this demo, fetching all docs is acceptable.
+    const snapshot = await getDocs(spinsRef);
+    const results = snapshot.docs.map(d => d.data() as SpinResult);
 
-    const r = localStorage.getItem(KEYS.RESULTS);
-    const allResults: SpinResult[] = r ? JSON.parse(r) : [];
-    const wheelResults = allResults.filter((res) => res.wheelId === wheelId);
+    // Check if we found anything. If wheel exists but no spins, it returns empty array which is fine.
     
-    // Distribution
+    // Calculate Distribution
     const distMap = new Map<string, number>();
-    
-    wheelResults.forEach(res => {
+    results.forEach(res => {
         distMap.set(res.segmentLabel, (distMap.get(res.segmentLabel) || 0) + 1);
     });
+
+    // We need the wheel colors to make the chart pretty. 
+    // We can fetch the wheel definition to match colors.
+    const wheel = await StorageService.getWheel(wheelId);
 
     const distribution = Array.from(distMap.entries()).map(([name, value]) => {
         const seg = wheel?.segments.find(s => s.label === name);
         return { name, value, fill: seg?.color || '#8884d8' };
     });
 
-    // Timeline (last 7 days simulated)
+    // Calculate Timeline
     const timeMap = new Map<string, number>();
-    wheelResults.forEach(res => {
+    results.forEach(res => {
         const date = new Date(res.timestamp).toLocaleDateString();
         timeMap.set(date, (timeMap.get(date) || 0) + 1);
     });
     
-    const timeline = Array.from(timeMap.entries()).map(([date, count]) => ({ date, count }));
+    // Sort timeline by date
+    const timeline = Array.from(timeMap.entries())
+        .map(([date, count]) => ({ date, count }))
+        .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     return {
-        totalSpins: wheelResults.length,
+        totalSpins: results.length,
         distribution,
         timeline
     };

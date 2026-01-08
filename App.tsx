@@ -8,30 +8,47 @@ import Analytics from './components/Analytics';
 import Auth from './components/Auth';
 import { User } from './types';
 import { StorageService } from './services/storageService';
+import { auth } from './services/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing session
-    const storedUser = StorageService.getUser();
-    if (storedUser) {
-      setUser(storedUser);
-    }
-    setLoading(false);
+    // Listen for authentication state changes (Login, Logout, Refresh)
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        setUser({
+          id: firebaseUser.uid,
+          email: firebaseUser.email || '',
+          name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User'
+        });
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
   }, []);
 
   const handleLogin = (u: User) => {
+    // With firebase listener, this is technically redundant but helps immediate UI feedback
     setUser(u);
   };
 
   const handleLogout = () => {
     StorageService.logout();
-    setUser(null);
+    // Listener will handle setUser(null)
   };
 
-  if (loading) return null; // Or a spinner
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+       <div className="text-indigo-600 text-xl font-semibold">Loading SpinToWin...</div>
+    </div>
+  );
 
   return (
     <Router>
