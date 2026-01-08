@@ -52,20 +52,31 @@ const App: React.FC = () => {
 
   return (
     <Router>
-      {!user ? (
-        <Auth onLogin={handleLogin} />
-      ) : (
-        <Layout user={user} onLogout={handleLogout}>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/new" element={<WheelEditor />} />
-            <Route path="/edit/:id" element={<WheelEditor />} />
-            <Route path="/spin/:id" element={<SpinPage />} />
-            <Route path="/analytics/:id" element={<Analytics />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Layout>
-      )}
+      <Routes>
+        {/* Public Route - Accessible without login */}
+        <Route path="/spin/:id" element={
+            <Layout user={user} onLogout={handleLogout}>
+              <SpinPage />
+            </Layout>
+        } />
+        
+        {/* Protected Routes & Auth Handling */}
+        <Route path="*" element={
+            !user ? (
+                <Auth onLogin={handleLogin} />
+            ) : (
+                <Layout user={user} onLogout={handleLogout}>
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/new" element={<WheelEditor />} />
+                    <Route path="/edit/:id" element={<WheelEditor />} />
+                    <Route path="/analytics/:id" element={<Analytics />} />
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Routes>
+                </Layout>
+            )
+        } />
+      </Routes>
     </Router>
   );
 };

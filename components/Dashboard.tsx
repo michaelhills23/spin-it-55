@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { Wheel } from '../types';
 import { StorageService } from '../services/storageService';
 import { Link } from 'react-router-dom';
-import { Edit, PlayCircle, BarChart2, Trash2, Clock } from 'lucide-react';
+import { Edit, PlayCircle, BarChart2, Trash2, Clock, Share2, Copy, Check } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
   const [wheels, setWheels] = useState<Wheel[]>([]);
   const [loading, setLoading] = useState(true);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
     loadWheels();
@@ -24,6 +25,14 @@ const Dashboard: React.FC = () => {
         await StorageService.deleteWheel(id);
         loadWheels();
     }
+  };
+
+  const handleShare = (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    const url = `${window.location.origin}/#/spin/${id}`;
+    navigator.clipboard.writeText(url);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
   };
 
   if (loading) return <div className="text-center py-20 text-gray-500">Loading your wheels...</div>;
@@ -71,6 +80,13 @@ const Dashboard: React.FC = () => {
                     <PlayCircle className="w-4 h-4 mr-2" />
                     Spin
                   </Link>
+                  <button
+                    onClick={(e) => handleShare(e, wheel.id)}
+                    className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none"
+                    title="Copy Share Link"
+                  >
+                    {copiedId === wheel.id ? <Check className="w-4 h-4 text-green-600" /> : <Share2 className="w-4 h-4" />}
+                  </button>
                   <Link
                     to={`/edit/${wheel.id}`}
                     className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none"

@@ -19,7 +19,8 @@ export const generateWheelConfig = async (prompt: string): Promise<Partial<Wheel
       Generate a list of segments based on the user's topic. 
       Assign vibrant, contrasting hex colors to each segment. 
       Limit to between 4 and 12 segments.
-      Weights should generally be equal (1) unless the topic implies probability.`,
+      Weights should generally be equal (1) unless the topic implies probability.
+      If the segments refer to specific things like websites, products, or places, try to include a relevant 'url' for each segment (e.g., a wikipedia link, a google search link, or a dummy example link).`,
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -33,6 +34,7 @@ export const generateWheelConfig = async (prompt: string): Promise<Partial<Wheel
                 label: { type: Type.STRING },
                 color: { type: Type.STRING },
                 weight: { type: Type.NUMBER },
+                url: { type: Type.STRING },
               },
               required: ["label", "color", "weight"],
             },

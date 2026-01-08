@@ -3,6 +3,7 @@ export interface Segment {
   label: string;
   color: string;
   weight: number;
+  url?: string;
 }
 
 export interface Wheel {

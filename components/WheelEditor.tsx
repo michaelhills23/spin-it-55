@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Wheel, Segment } from '../types';
 import { StorageService } from '../services/storageService';
 import { generateWheelConfig } from '../services/geminiService';
-import { Plus, Trash2, Wand2, Save, ArrowLeft, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Wand2, Save, ArrowLeft, RefreshCw, Link as LinkIcon, Share2, Copy } from 'lucide-react';
 
 const COLORS = [
   '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981',
@@ -21,6 +21,7 @@ const WheelEditor: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -106,13 +107,33 @@ const WheelEditor: React.FC = () => {
     setSegments(segments.filter((_, i) => i !== index));
   };
 
+  const copyShareLink = () => {
+    if (!id) return;
+    const url = `${window.location.origin}/#/spin/${id}`;
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   if (loading) return <div>Loading...</div>;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-0">
-      <button onClick={() => navigate('/')} className="mb-6 flex items-center text-gray-500 hover:text-gray-700 transition">
-        <ArrowLeft className="w-4 h-4 mr-1" /> Back to Dashboard
-      </button>
+    <div className="max-w-4xl mx-auto px-4 sm:px-0 pb-12">
+      <div className="flex justify-between items-center mb-6">
+          <button onClick={() => navigate('/')} className="flex items-center text-gray-500 hover:text-gray-700 transition">
+            <ArrowLeft className="w-4 h-4 mr-1" /> Back to Dashboard
+          </button>
+          
+          {id && (
+            <button 
+                onClick={copyShareLink}
+                className="flex items-center space-x-2 text-indigo-600 hover:text-indigo-800 font-medium bg-indigo-50 px-3 py-1.5 rounded-lg transition"
+            >
+                {copied ? <Copy className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
+                <span>{copied ? 'Copied!' : 'Share Link'}</span>
+            </button>
+          )}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
@@ -137,39 +158,51 @@ const WheelEditor: React.FC = () => {
                     </button>
                 </div>
                 
-                <div className="space-y-3">
+                <div className="space-y-4">
                     {segments.map((segment, index) => (
-                        <div key={segment.id} className="flex items-center space-x-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
-                            <input
-                                type="color"
-                                value={segment.color}
-                                onChange={(e) => updateSegment(index, 'color', e.target.value)}
-                                className="h-8 w-8 rounded cursor-pointer border-none bg-transparent"
-                                title="Segment Color"
-                            />
-                            <input
-                                type="text"
-                                value={segment.label}
-                                onChange={(e) => updateSegment(index, 'label', e.target.value)}
-                                className="flex-1 px-3 py-1.5 border border-gray-300 rounded-md text-sm"
-                                placeholder="Label"
-                            />
-                            <input
-                                type="number"
-                                min="1"
-                                value={segment.weight}
-                                onChange={(e) => updateSegment(index, 'weight', parseInt(e.target.value) || 1)}
-                                className="w-20 px-3 py-1.5 border border-gray-300 rounded-md text-sm"
-                                placeholder="Weight"
-                                title="Probability Weight"
-                            />
-                            <button
-                                onClick={() => removeSegment(index)}
-                                className="text-red-400 hover:text-red-600 p-1"
-                                disabled={segments.length <= 2}
-                            >
-                                <Trash2 className="w-4 h-4" />
-                            </button>
+                        <div key={segment.id} className="bg-gray-50 p-3 rounded-lg border border-gray-200 shadow-sm">
+                            <div className="flex items-center space-x-3 mb-2">
+                                <input
+                                    type="color"
+                                    value={segment.color}
+                                    onChange={(e) => updateSegment(index, 'color', e.target.value)}
+                                    className="h-9 w-9 rounded cursor-pointer border-none bg-transparent"
+                                    title="Segment Color"
+                                />
+                                <input
+                                    type="text"
+                                    value={segment.label}
+                                    onChange={(e) => updateSegment(index, 'label', e.target.value)}
+                                    className="flex-1 px-3 py-1.5 border border-gray-300 rounded-md text-sm"
+                                    placeholder="Label"
+                                />
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={segment.weight}
+                                    onChange={(e) => updateSegment(index, 'weight', parseInt(e.target.value) || 1)}
+                                    className="w-16 px-3 py-1.5 border border-gray-300 rounded-md text-sm text-center"
+                                    placeholder="Wt"
+                                    title="Probability Weight"
+                                />
+                                <button
+                                    onClick={() => removeSegment(index)}
+                                    className="text-red-400 hover:text-red-600 p-1"
+                                    disabled={segments.length <= 2}
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                            </div>
+                            <div className="flex items-center pl-12 pr-1">
+                                <LinkIcon className="w-3 h-3 text-gray-400 mr-2 flex-shrink-0" />
+                                <input
+                                    type="text"
+                                    value={segment.url || ''}
+                                    onChange={(e) => updateSegment(index, 'url', e.target.value)}
+                                    className="w-full px-2 py-1 border border-gray-200 rounded text-xs text-gray-600 focus:border-indigo-300 focus:ring-0 bg-white"
+                                    placeholder="Result URL (optional)"
+                                />
+                            </div>
                         </div>
                     ))}
                 </div>
