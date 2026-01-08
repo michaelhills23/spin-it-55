@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Check if user is signed in
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    // Check if the user matches the requested userId
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Users: Users can only read/write their own data
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Wheels
+    match /wheels/{wheelId} {
+      // Read: Public wheels are readable by everyone. Private wheels only by owner.
+      allow read: if resource.data.isPublic == true || (isSignedIn() && resource.data.userId == request.auth.uid);
+      
+      // Create: Authenticated users can create wheels, must assign to themselves
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      
+      // Update/Delete: Only the owner can modify or delete
+      allow update, delete: if isOwner(resource.data.userId);
+
+      // Spins (Subcollection)
+      match /spins/{spinId} {
+        // Read: Only the wheel owner can see the results/analytics
+        allow read: if isSignedIn() && get(/databases/$(database)/documents/wheels/$(wheelId)).data.userId == request.auth.uid;
+        
+        // Create: Public allowed if wheel is public. Otherwise owner only.
+        allow create: if get(/databases/$(database)/documents/wheels/$(wheelId)).data.isPublic == true || 
+                      (isSignedIn() && get(/databases/$(database)/documents/wheels/$(wheelId)).data.userId == request.auth.uid);
+      }
+    }
+  }
+}

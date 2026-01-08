@@ -1,0 +1,5 @@
+{
+  "name": "SpinToWin",
+  "description": "A modern, interactive Spin Wheel application featuring AI-powered wheel generation, real-time analytics, and smooth physics-based animations.",
+  "requestFramePermissions": []
+}
